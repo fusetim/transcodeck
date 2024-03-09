@@ -7,7 +7,8 @@ is to simplify the process of transcoding media files using multiples computers 
 the transcoded files).
 --
 
-Features:
+== Features
+
 - Queue management: transcodeck helps you manage the queue of media files to be transcoded, ensuring that no two computers
   transcode the same media file simultaneously.
 - Encryption: transcodeck uses AGE encryption to secure the transcoded media files, providing an additional layer of protection. This 

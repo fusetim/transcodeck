@@ -1,10 +1,15 @@
 use clap::{Parser, Subcommand};
 use anyhow::{Result, anyhow, bail};
-use sea_orm::{Database, DatabaseConnection};
+use diesel::pg::PgConnection;
+use diesel::prelude::*;
+use dotenvy::dotenv;
+
+pub mod model;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
+    #[clap(long, env = "DATABASE_URL")]
     db_uri: String,    
 
     #[clap(subcommand)]
@@ -22,7 +27,7 @@ async fn main() -> Result<()> {
     pretty_env_logger::init();
     let args = Args::parse();
 
-    let mut db : DatabaseConnection = Database::connect(args.db_uri).await?;
+    let mut db = PgConnection::establish(&args.db_uri)?;
 
     match args.cmd {
         Command::ListMedia => {
@@ -30,6 +35,6 @@ async fn main() -> Result<()> {
         }
     }
 
-    db.close().await?;
     Ok(())
 }
+
