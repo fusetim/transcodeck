@@ -1,0 +1,33 @@
+= transcodeck
+
+[abstract]
+--
+transcodeck is a small CLI tool designed to manage a list of media files for transcoding using ffmpeg. Its main goal
+is to simplify the process of transcoding media files using multiples computers (and using a public HTTP server to retrieve
+the transcoded files).
+--
+
+Features:
+- Queue management: transcodeck helps you manage the queue of media files to be transcoded, ensuring that no two computers
+  transcode the same media file simultaneously.
+- Encryption: transcodeck uses AGE encryption to secure the transcoded media files, providing an additional layer of protection. This 
+  is especially useful when using a public HTTP server to retrieve the transcoded files and some materials are sensitive or copyrighted.
+- Local storage: The tool saves both the unencrypted media file and the AGE encrypted blob locally.
+- Segmentation: transcodeck leverages ffmpeg to split long media files into smaller segments, enabling parallelization for faster transcoding.
+
+== Installation
+
+To install transcodeck, follow these steps:
+
+__**TBA**__
+
+== Usage
+
+To use transcodeck, follow these steps:
+
+__**TBA**__
+
+== License
+
+The license for this project is still undecided. Please refer to the LICENSE file for more information.
+
