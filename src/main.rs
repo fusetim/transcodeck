@@ -1,20 +1,21 @@
+use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
-use anyhow::{Result, anyhow, bail};
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use std::path::PathBuf;
 
-pub mod model;
-pub mod schema;
 pub mod add_media;
 pub mod add_transcode;
+pub mod daemon;
+pub mod model;
+pub mod schema;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
     /// The URI of the database to connect to
     #[clap(long, env = "DATABASE_URL")]
-    db_uri: String,    
+    db_uri: String,
 
     #[clap(subcommand)]
     cmd: Command,
@@ -28,9 +29,11 @@ enum Command {
     #[command(about = "Add a transcoding job")]
     Transcode(TranscodeCommand),
 
-//    #[command(about = "Add a transcoding fragment job")]
-//    TranscodeFragment(TranscodeFragmentCommand),
+    #[command(about = "Start the transcoding daemon")]
+    Daemon(DaemonCommand),
 
+    //    #[command(about = "Add a transcoding fragment job")]
+    //    TranscodeFragment(TranscodeFragmentCommand),
     #[command(about = "List all media in the database")]
     ListMedia,
 }
@@ -77,10 +80,20 @@ pub struct TranscodeCommand {
 // pub struct TranscodeFragmentCommand {
 //     /// The fragment ID to transcode
 //     fragment_id: String,
-// 
+//
 //     /// The ffmpeg command to use for transcoding
 //     ffmpeg_command: String,
 // }
+
+#[derive(Parser, Debug)]
+pub struct DaemonCommand {
+    /// Output directory for transcoded media
+    output_dir: PathBuf,
+
+    /// Reserve flag, should the daemon try to reserve more jobs than it can process?
+    #[clap(short, long, default_value = "false")]
+    reserve: bool,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -95,13 +108,13 @@ async fn main() -> Result<()> {
     match args.cmd {
         Command::AddMedia(cmd) => {
             add_media::add_media(&mut db, cmd).await?;
-        },
+        }
+        Command::Daemon(cmd) => daemon::daemon(&mut db, cmd).await?,
         Command::ListMedia => {
             println!("ListMedia");
-        },
+        }
         Command::Transcode(cmd) => add_transcode::new_transcode(&mut db, cmd).await?,
     }
 
     Ok(())
 }
-

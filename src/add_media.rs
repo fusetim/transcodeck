@@ -1,20 +1,26 @@
+use age::secrecy::ExposeSecret;
+use age::Recipient;
+use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
-use anyhow::{Result, anyhow, bail};
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
-use uuid::Uuid;
 use std::path::{Path, PathBuf};
-use tokio::process::Command;
-use age::{Recipient};
-use age::secrecy::ExposeSecret;
 use tempdir::TempDir;
-use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt, FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
+use tokio::process::Command;
+use tokio_util::compat::{
+    FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt, TokioAsyncReadCompatExt,
+    TokioAsyncWriteCompatExt,
+};
+use uuid::Uuid;
 
 use crate::{model, schema, AddMediaCommand};
 
 pub async fn add_media(db: &mut PgConnection, cmd: AddMediaCommand) -> Result<()> {
     let media = model::NewMedia {
-        basename: cmd.input.file_stem().map(|s| s.to_string_lossy().to_string()),
+        basename: cmd
+            .input
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string()),
     };
     let media = diesel::insert_into(schema::media::table)
         .values(&media)
@@ -23,7 +29,10 @@ pub async fn add_media(db: &mut PgConnection, cmd: AddMediaCommand) -> Result<()
 
     println!("Media added: {}", media_id);
 
-    let tmp_dir = TempDir::new(&format!("transcodeck-{}", media_id.as_hyphenated().to_string()))?;
+    let tmp_dir = TempDir::new(&format!(
+        "transcodeck-{}",
+        media_id.as_hyphenated().to_string()
+    ))?;
     let mut fragments = Vec::new();
 
     if cmd.fragment > 0 {
@@ -39,7 +48,8 @@ pub async fn add_media(db: &mut PgConnection, cmd: AddMediaCommand) -> Result<()
         tokio::fs::create_dir_all(&output_dir).await?;
 
         println!("Fragmenting media into {} second pieces", cmd.fragment);
-        let _fragments = fragment_media(cmd.input.clone(), output_dir, cmd.fragment as usize).await?;
+        let _fragments =
+            fragment_media(cmd.input.clone(), output_dir, cmd.fragment as usize).await?;
         for fragment in _fragments {
             fragments.push(model::NewFragment {
                 media_id,
@@ -100,7 +110,11 @@ pub async fn add_media(db: &mut PgConnection, cmd: AddMediaCommand) -> Result<()
     Ok(())
 }
 
-pub async fn fragment_media(input: impl AsRef<Path>, output_dir: impl AsRef<Path>, duration: usize) -> Result<Vec<model::NewFragment>> {
+pub async fn fragment_media(
+    input: impl AsRef<Path>,
+    output_dir: impl AsRef<Path>,
+    duration: usize,
+) -> Result<Vec<model::NewFragment>> {
     let status = Command::new("ffmpeg")
         .arg("-hide_banner")
         .arg("-loglevel")
@@ -126,12 +140,11 @@ pub async fn fragment_media(input: impl AsRef<Path>, output_dir: impl AsRef<Path
     if !status.success() {
         bail!("Failed to fragment media: status={:?}", status.code());
     }
-    
+
     let mut fragments = vec![];
     let mut fragment_number = 0;
 
     // Waiting for completion of the command
-
 
     // Listing the files in the output directory
     let mut dir = tokio::fs::read_dir(output_dir.as_ref()).await?;
@@ -153,8 +166,13 @@ pub async fn fragment_media(input: impl AsRef<Path>, output_dir: impl AsRef<Path
     Ok(fragments)
 }
 
-async fn encrypt_file(input: impl AsRef<Path>, output: impl AsRef<Path>, pubkey: Box<dyn Recipient + Send>) -> Result<()> {
-    let encryptor = age::Encryptor::with_recipients(vec![pubkey]).expect("Failed to create encryptor");
+async fn encrypt_file(
+    input: impl AsRef<Path>,
+    output: impl AsRef<Path>,
+    pubkey: Box<dyn Recipient + Send>,
+) -> Result<()> {
+    let encryptor =
+        age::Encryptor::with_recipients(vec![pubkey]).expect("Failed to create encryptor");
 
     let mut input_file = tokio::fs::File::open(input).await?;
     let mut output_file = tokio::fs::File::create(output).await?;

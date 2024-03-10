@@ -1,10 +1,11 @@
+use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use uuid::Uuid;
-use chrono::NaiveDateTime;
 
-#[derive(Queryable, Selectable)]
+#[derive(Queryable, Selectable, AsChangeset)]
 #[diesel(table_name = crate::schema::fragment)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Fragment {
     pub fragment_id: Uuid,
     pub media_id: Uuid,

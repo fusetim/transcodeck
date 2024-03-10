@@ -1,12 +1,12 @@
+use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
-use anyhow::{Result, anyhow, bail};
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
 use std::path::PathBuf;
 use uuid::Uuid;
 
 use crate::{model, schema, TranscodeCommand};
-use model::{JobStatus, FragmentJobStatus};
+use model::{FragmentJobStatus, JobStatus};
 
 pub async fn new_transcode(db: &mut PgConnection, cmd: TranscodeCommand) -> Result<()> {
     let media_id = Uuid::parse_str(&cmd.media_id)?;
@@ -54,11 +54,18 @@ pub async fn new_transcode(db: &mut PgConnection, cmd: TranscodeCommand) -> Resu
         .execute(db)?;
 
     if cmd.start {
-        println!("Transcoding job added and started: {} ({} fragments)", job_id, fragments.len());
+        println!(
+            "Transcoding job added and started: {} ({} fragments)",
+            job_id,
+            fragments.len()
+        );
     } else {
-        println!("Transcoding job added: {} ({} fragments)", job_id, fragments.len());
+        println!(
+            "Transcoding job added: {} ({} fragments)",
+            job_id,
+            fragments.len()
+        );
     }
 
     Ok(())
 }
-

@@ -1,10 +1,11 @@
+use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use uuid::Uuid;
-use chrono::NaiveDateTime;
 
-#[derive(Queryable, Selectable)]
+#[derive(Queryable, Selectable, AsChangeset)]
 #[diesel(table_name = crate::schema::media)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Media {
     pub media_id: Uuid,
     pub basename: Option<String>,
@@ -19,4 +20,3 @@ pub struct Media {
 pub struct NewMedia {
     pub basename: Option<String>,
 }
-
