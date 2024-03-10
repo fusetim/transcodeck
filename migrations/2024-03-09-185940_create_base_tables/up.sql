@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS media (
 CREATE TABLE IF NOT EXISTS fragment (
   fragment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   media_id UUID REFERENCES media(media_id) ON DELETE CASCADE NOT NULL,
+  filename TEXT NOT NULL,
   fragment_number INT,
   encryption_key TEXT,
   retrieval_url TEXT,

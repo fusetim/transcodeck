@@ -8,6 +8,7 @@ use chrono::NaiveDateTime;
 pub struct Fragment {
     pub fragment_id: Uuid,
     pub media_id: Uuid,
+    pub filename: String,
     pub fragment_number: Option<i32>,
     pub encryption_key: Option<String>,
     pub retrieval_url: Option<String>,
@@ -19,8 +20,9 @@ pub struct Fragment {
 #[derive(Insertable)]
 #[diesel(table_name = crate::schema::fragment)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
-pub struct NewMedia {
+pub struct NewFragment {
     pub media_id: Uuid,
+    pub filename: String,
     pub fragment_number: Option<i32>,
     pub encryption_key: Option<String>,
     pub retrieval_url: Option<String>,

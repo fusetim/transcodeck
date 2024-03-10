@@ -14,6 +14,7 @@ diesel::table! {
     fragment (fragment_id) {
         fragment_id -> Uuid,
         media_id -> Uuid,
+        filename -> Text,
         fragment_number -> Nullable<Int4>,
         encryption_key -> Nullable<Text>,
         retrieval_url -> Nullable<Text>,
