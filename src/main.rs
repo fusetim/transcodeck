@@ -7,6 +7,7 @@ use std::path::PathBuf;
 pub mod model;
 pub mod schema;
 pub mod add_media;
+pub mod add_transcode;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -23,6 +24,12 @@ struct Args {
 enum Command {
     #[command(about = "Add media to the database")]
     AddMedia(AddMediaCommand),
+
+    #[command(about = "Add a transcoding job")]
+    Transcode(TranscodeCommand),
+
+//    #[command(about = "Add a transcoding fragment job")]
+//    TranscodeFragment(TranscodeFragmentCommand),
 
     #[command(about = "List all media in the database")]
     ListMedia,
@@ -53,6 +60,28 @@ pub struct AddMediaCommand {
     output_dir: Option<PathBuf>,
 }
 
+#[derive(Parser, Debug)]
+pub struct TranscodeCommand {
+    /// The media ID to transcode
+    media_id: String,
+
+    /// The ffmpeg command to use for transcoding
+    ffmpeg_command: String,
+
+    /// Start flag, if set, the transcoding job will be queued to be processed immediately.
+    #[clap(short, long, default_value = "false")]
+    start: bool,
+}
+
+// #[derive(Parser, Debug)]
+// pub struct TranscodeFragmentCommand {
+//     /// The fragment ID to transcode
+//     fragment_id: String,
+// 
+//     /// The ffmpeg command to use for transcoding
+//     ffmpeg_command: String,
+// }
+
 #[tokio::main]
 async fn main() -> Result<()> {
     if let Err(err) = dotenvy::dotenv() {
@@ -66,10 +95,11 @@ async fn main() -> Result<()> {
     match args.cmd {
         Command::AddMedia(cmd) => {
             add_media::add_media(&mut db, cmd).await?;
-        }
+        },
         Command::ListMedia => {
             println!("ListMedia");
-        }
+        },
+        Command::Transcode(cmd) => add_transcode::new_transcode(&mut db, cmd).await?,
     }
 
     Ok(())

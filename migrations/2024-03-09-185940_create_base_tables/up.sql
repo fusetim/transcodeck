@@ -25,6 +25,7 @@ CREATE TYPE fragment_job_status AS ENUM ('pending', 'queued', 'reserved', 'in_pr
 CREATE TABLE IF NOT EXISTS transcoding_job (
   transcoding_job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   media_id UUID REFERENCES media(media_id) ON DELETE CASCADE NOT NULL,
+  ffmpeg_command TEXT NOT NULL,
   status job_status NOT NULL DEFAULT 'pending',
   created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
   updated_at TIMESTAMPTZ DEFAULT now() NOT NULL,

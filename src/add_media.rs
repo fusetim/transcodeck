@@ -10,7 +10,6 @@ use age::secrecy::ExposeSecret;
 use tempdir::TempDir;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt, FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
 
-
 use crate::{model, schema, AddMediaCommand};
 
 pub async fn add_media(db: &mut PgConnection, cmd: AddMediaCommand) -> Result<()> {
@@ -77,9 +76,9 @@ pub async fn add_media(db: &mut PgConnection, cmd: AddMediaCommand) -> Result<()
             output.set_extension("age");
             let identity = age::x25519::Identity::generate();
             let pubkey = identity.to_public();
+            fragment.filename = output.file_name().unwrap().to_string_lossy().to_string();
             encrypt_file(input, output, Box::new(pubkey)).await?;
             fragment.encryption_key = Some(identity.to_string().expose_secret().to_owned());
-            fragment.filename = output.file_name().unwrap().to_string_lossy().to_string();
         }
     }
 

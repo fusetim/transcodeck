@@ -56,6 +56,7 @@ diesel::table! {
     transcoding_job (transcoding_job_id) {
         transcoding_job_id -> Uuid,
         media_id -> Uuid,
+        ffmpeg_command -> Text,
         status -> JobStatus,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,

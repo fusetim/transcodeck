@@ -9,6 +9,7 @@ pub struct TranscodingJob {
     pub transcoding_job_id: Uuid,
     pub media_id: Uuid,
     pub status: JobStatus,
+    pub ffmpeg_command: String,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub deleted_at: Option<NaiveDateTime>,
@@ -19,6 +20,7 @@ pub struct TranscodingJob {
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct NewTranscodingJob {
     pub media_id: Uuid,
+    pub ffmpeg_command: String,
     pub status: JobStatus,
 }
 
