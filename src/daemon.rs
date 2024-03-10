@@ -4,9 +4,11 @@ use anyhow::{anyhow, bail, Result};
 use clap::{Parser, Subcommand};
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
+use leon::Template;
 use reqwest::Client;
 use std::iter;
 use std::path::PathBuf;
+use std::str::FromStr;
 use tempdir::TempDir;
 use tokio_util::compat::{
     FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt, TokioAsyncReadCompatExt,
@@ -21,14 +23,22 @@ pub async fn daemon(db: &mut PgConnection, cmd: DaemonCommand) -> Result<()> {
     println!("Starting daemon...");
 
     let mut http = reqwest::Client::new();
+    let mut template_values = std::collections::HashMap::new();
+    for (key, value) in std::env::vars() {
+        let mut key = key.to_lowercase();
+        if key.starts_with("transcodeck_template_") {
+            let template_key = key.split_off(22);
+            template_values.insert(template_key, value);
+        }
+    }
 
     loop {
         // Searching for a fragment job that is queued
         let job = schema::transcoding_fragment_job::table
             .filter(schema::transcoding_fragment_job::status.eq(FragmentJobStatus::Queued))
             .select((
-                schema::transcoding_fragment_job::transcoding_job_id,
                 schema::transcoding_fragment_job::transcoding_fragment_job_id,
+                schema::transcoding_fragment_job::transcoding_job_id,
                 schema::transcoding_fragment_job::fragment_id,
             ))
             .order(schema::transcoding_fragment_job::created_at.asc())
@@ -41,14 +51,18 @@ pub async fn daemon(db: &mut PgConnection, cmd: DaemonCommand) -> Result<()> {
             fragment_id,
         }) = job
         {
+            println!(
+                "Found a candidate fragment job: {}",
+                transcoding_fragment_job_id
+            );
             // Updating the fragment job to in progress, if it is still queued
             let changed = diesel::update(schema::transcoding_fragment_job::table)
-                .set(schema::transcoding_fragment_job::status.eq(FragmentJobStatus::InProgress))
                 .filter(
                     schema::transcoding_fragment_job::transcoding_fragment_job_id
                         .eq(transcoding_fragment_job_id),
                 )
                 .filter(schema::transcoding_fragment_job::status.eq(FragmentJobStatus::Queued))
+                .set(schema::transcoding_fragment_job::status.eq(FragmentJobStatus::InProgress))
                 .execute(db)?;
             if changed <= 0 {
                 continue;
@@ -83,7 +97,7 @@ pub async fn daemon(db: &mut PgConnection, cmd: DaemonCommand) -> Result<()> {
             if fragment.retrieval_url.is_none() {
                 bail!("Fragment retrieval URL is missing");
             }
-            let fragment_url = format!("{}/{}", fragment.retrieval_url.unwrap(), fragment.filename);
+            let fragment_url = fragment.retrieval_url.unwrap();
             let fragment_path = tempdir.path().join(&fragment.filename);
             let mut fragment_file = tokio::fs::File::create(&fragment_path).await?;
             println!("Downloading fragment: {}", fragment_url);
@@ -93,15 +107,56 @@ pub async fn daemon(db: &mut PgConnection, cmd: DaemonCommand) -> Result<()> {
             println!("Fragment downloaded: {}", fragment_path.display());
 
             // Decrypt the media fragment if needed
-            if fragment.encryption_key.is_some() {
-                let key = age::x25519::Identity::from_str(fragment.encryption_key.as_ref())?;
+            let media_path = if fragment.encryption_key.is_some() {
+                let key =
+                    age::x25519::Identity::from_str(fragment.encryption_key.as_ref().unwrap())
+                        .expect("Failed to parse encryption key");
                 let mut output_path = tempdir.path().join(&fragment.filename);
                 output_path.set_extension("mkv");
-                decrypt_file(fragment_path, output_path, key).await?;
+                decrypt_file(fragment_path, output_path.clone(), key).await?;
                 println!("Fragment decrypted: {}", output_path.display());
-            }
+                output_path
+            } else {
+                fragment_path
+            };
 
             // Transcode the media fragment
+            let mut output_path = cmd
+                .output_dir
+                .join(&format!(
+                    "transcode-{}",
+                    transcoding_job_id.as_hyphenated().to_string()
+                ))
+                .join(&fragment.filename);
+            output_path.set_extension("mkv");
+            tokio::fs::create_dir_all(&output_path.parent().unwrap()).await?;
+
+            template_values.insert("input".into(), media_path.to_string_lossy().to_string());
+            template_values.insert("output".into(), output_path.to_string_lossy().to_string());
+
+            let ctemplate =
+                Template::parse(&ffmpeg_command).expect("Failed to parse ffmpeg command");
+            let command = ctemplate.render(&template_values)?;
+            let mut transcoder = tokio::process::Command::new("ffmpeg")
+                .args(command.split_whitespace())
+                .spawn()?;
+
+            let status = transcoder.wait().await?;
+            if !status.success() {
+                println!("Transcoding failed: {}", status);
+            } else {
+                println!("Transcoding completed: {}", output_path.display());
+                diesel::update(schema::transcoding_fragment_job::table)
+                    .set(schema::transcoding_fragment_job::status.eq(FragmentJobStatus::Completed))
+                    .filter(
+                        schema::transcoding_fragment_job::transcoding_fragment_job_id
+                            .eq(transcoding_fragment_job_id),
+                    )
+                    .execute(db)?;
+            }
+
+            // Clean up the temporary directory
+            let _ = tempdir.close();
         } else {
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         }

@@ -171,6 +171,8 @@ async fn encrypt_file(
     output: impl AsRef<Path>,
     pubkey: Box<dyn Recipient + Send>,
 ) -> Result<()> {
+    use futures::io::AsyncWriteExt;
+
     let encryptor =
         age::Encryptor::with_recipients(vec![pubkey]).expect("Failed to create encryptor");
 
@@ -179,6 +181,8 @@ async fn encrypt_file(
 
     let mut enc_writer = encryptor.wrap_async_output(output_file.compat()).await?;
     futures::io::copy(&mut input_file.compat(), &mut enc_writer).await?;
+    enc_writer.flush().await?;
+    enc_writer.close().await?;
 
     Ok(())
 }
