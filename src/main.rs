@@ -2,9 +2,9 @@ use clap::{Parser, Subcommand};
 use anyhow::{Result, anyhow, bail};
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
-use dotenvy::dotenv;
 
 pub mod model;
+pub mod schema;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -24,6 +24,9 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    if let Err(err) = dotenvy::dotenv() {
+        eprintln!("Error loading .env file: {}", err);
+    }
     pretty_env_logger::init();
     let args = Args::parse();
 
