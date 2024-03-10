@@ -2,9 +2,14 @@ use clap::{Parser, Subcommand};
 use anyhow::{Result, anyhow, bail};
 use diesel::pg::PgConnection;
 use diesel::prelude::*;
-use ffmpeg_sidecar::{command::FfmpegCommand, event::FfmpegEvent, command::ffmpeg_is_installed};
 use uuid::Uuid;
 use std::path::{Path, PathBuf};
+use tokio::process::Command;
+use age::{Recipient};
+use age::secrecy::ExposeSecret;
+use tempdir::TempDir;
+use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt, FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt};
+
 
 use crate::{model, schema, AddMediaCommand};
 
@@ -19,18 +24,23 @@ pub async fn add_media(db: &mut PgConnection, cmd: AddMediaCommand) -> Result<()
 
     println!("Media added: {}", media_id);
 
+    let tmp_dir = TempDir::new(&format!("transcodeck-{}", media_id.as_hyphenated().to_string()))?;
     let mut fragments = Vec::new();
 
     if cmd.fragment > 0 {
-        let output_dir = cmd.output_dir.unwrap_or_else(|| {
-            let mut output_dir = cmd.input.clone();
-            output_dir.set_extension("");
-            output_dir
-        });
+        let output_dir = if cmd.encrypted {
+            tmp_dir.path().to_path_buf()
+        } else {
+            cmd.output_dir.clone().unwrap_or_else(|| {
+                let mut output_dir = cmd.input.clone();
+                output_dir.set_extension("");
+                output_dir
+            })
+        };
         tokio::fs::create_dir_all(&output_dir).await?;
 
         println!("Fragmenting media into {} second pieces", cmd.fragment);
-        let _fragments = fragment_media(cmd.input, output_dir, cmd.fragment as usize).await?;
+        let _fragments = fragment_media(cmd.input.clone(), output_dir, cmd.fragment as usize).await?;
         for fragment in _fragments {
             fragments.push(model::NewFragment {
                 media_id,
@@ -46,9 +56,41 @@ pub async fn add_media(db: &mut PgConnection, cmd: AddMediaCommand) -> Result<()
             filename: cmd.input.file_name().unwrap().to_string_lossy().to_string(),
             fragment_number: None,
             encryption_key: None,
-            retrieval_url: cmd.retrieval_url,
+            retrieval_url: None,
         };
         fragments.push(fragment);
+    }
+
+    if cmd.encrypted {
+        println!("Encrypting {} media...", fragments.len());
+        let output_dir = cmd.output_dir.unwrap_or_else(|| {
+            let mut output_dir = cmd.input.clone();
+            output_dir.set_extension("");
+            output_dir
+        });
+
+        tokio::fs::create_dir_all(&output_dir).await?;
+
+        for fragment in &mut fragments {
+            let input = tmp_dir.path().join(&fragment.filename);
+            let mut output = output_dir.join(&fragment.filename);
+            output.set_extension("age");
+            let identity = age::x25519::Identity::generate();
+            let pubkey = identity.to_public();
+            encrypt_file(input, output, Box::new(pubkey)).await?;
+            fragment.encryption_key = Some(identity.to_string().expose_secret().to_owned());
+            fragment.filename = output.file_name().unwrap().to_string_lossy().to_string();
+        }
+    }
+
+    if let Some(base_url) = cmd.retrieval_url {
+        for fragment in &mut fragments {
+            fragment.retrieval_url = Some(format!("{}/{}", base_url, fragment.filename));
+        }
+    }
+
+    if let Err(e) = tmp_dir.close() {
+        eprintln!("Failed to clean up temporary directory: {}", e);
     }
 
     println!("Adding {} fragments to the database.", fragments.len());
@@ -60,29 +102,37 @@ pub async fn add_media(db: &mut PgConnection, cmd: AddMediaCommand) -> Result<()
 }
 
 pub async fn fragment_media(input: impl AsRef<Path>, output_dir: impl AsRef<Path>, duration: usize) -> Result<Vec<model::NewFragment>> {
-    if (!ffmpeg_is_installed()) {
-        bail!("ffmpeg is not installed");
-    }
+    let status = Command::new("ffmpeg")
+        .arg("-hide_banner")
+        .arg("-loglevel")
+        .arg("error")
+        .arg("-stats")
+        .arg("-y")
+        .arg("-i")
+        .arg(input.as_ref())
+        .arg("-c:v")
+        .arg("copy")
+        .arg("-c:a")
+        .arg("copy")
+        .arg("-f")
+        .arg("segment")
+        .arg("-segment_time")
+        .arg(duration.to_string())
+        .arg("-reset_timestamps")
+        .arg("1")
+        .arg(output_dir.as_ref().join("fragment-%03d.mkv"))
+        .status()
+        .await?;
 
-    let mut ffmpeg_cmd = FfmpegCommand::new_with_path("/usr/bin/ffmpeg");
-    ffmpeg_cmd
-        .input(input.as_ref().to_str().unwrap())
-        .codec_video("copy")
-        .codec_audio("copy")
-        .args(&["-segment_time", duration.to_string().as_str()])
-        .args(&["-f", "segment"])
-        .output(format!("{}/fragment_%06d.mkv", output_dir.as_ref().to_str().unwrap()))
-        .print_command();
-    //let mut cmd : std::process::Command = ffmpeg_cmd.into();
-    //let mut async_cmd = tokio::process::Command::from(cmd);
-    //let mut child = async_cmd.spawn()?;
+    if !status.success() {
+        bail!("Failed to fragment media: status={:?}", status.code());
+    }
     
     let mut fragments = vec![];
     let mut fragment_number = 0;
 
     // Waiting for completion of the command
-    //let _ = child.wait().await;
-    ffmpeg_cmd.spawn()?.wait()?;
+
 
     // Listing the files in the output directory
     let mut dir = tokio::fs::read_dir(output_dir.as_ref()).await?;
@@ -102,4 +152,16 @@ pub async fn fragment_media(input: impl AsRef<Path>, output_dir: impl AsRef<Path
     }
 
     Ok(fragments)
+}
+
+async fn encrypt_file(input: impl AsRef<Path>, output: impl AsRef<Path>, pubkey: Box<dyn Recipient + Send>) -> Result<()> {
+    let encryptor = age::Encryptor::with_recipients(vec![pubkey]).expect("Failed to create encryptor");
+
+    let mut input_file = tokio::fs::File::open(input).await?;
+    let mut output_file = tokio::fs::File::create(output).await?;
+
+    let mut enc_writer = encryptor.wrap_async_output(output_file.compat()).await?;
+    futures::io::copy(&mut input_file.compat(), &mut enc_writer).await?;
+
+    Ok(())
 }

@@ -7,7 +7,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-age = "0.10.0"
+age = { version = "0.10.0", features = ["async"] }
 anyhow = "1.0.80"
 clap = { version = "4.5.2", features = ["derive", "env"] }
 log = "0.4.21"
@@ -15,7 +15,9 @@ pretty_env_logger = "0.5.0"
 tokio = { version = "1", features = ["full"] }
 diesel = { version = "2.1.0", features = ["postgres", "extras"] }
 dotenvy = "0.15.7"
-ffmpeg-sidecar = "1.0.1"
 uuid = { version = "1.7.0", features = ["v4", "macro-diagnostics"] }
 chrono = "0.4.35"
 diesel-derive-enum = { version = "2.1.0", features = ["postgres"] }
+tempdir = "0.3.7"
+tokio-util = { version = "0.7.10", features = ["compat"] }
+futures = "0.3.30"
