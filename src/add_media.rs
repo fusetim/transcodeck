@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::{model, schema, AddMediaCommand};
 
-pub async fn add_media(db: &mut PgConnection, cmd: AddMediaCommand) -> Result<()> {
+pub async fn add_media(db: &mut PgConnection, cmd: AddMediaCommand, ffmpeg_bin: &str) -> Result<()> {
     let media = model::NewMedia {
         basename: cmd
             .input
@@ -49,7 +49,7 @@ pub async fn add_media(db: &mut PgConnection, cmd: AddMediaCommand) -> Result<()
 
         println!("Fragmenting media into {} second pieces", cmd.fragment);
         let _fragments =
-            fragment_media(cmd.input.clone(), output_dir, cmd.fragment as usize).await?;
+            fragment_media(ffmpeg_bin, cmd.input.clone(), output_dir, cmd.fragment as usize).await?;
         for fragment in _fragments {
             fragments.push(model::NewFragment {
                 media_id,
@@ -111,11 +111,12 @@ pub async fn add_media(db: &mut PgConnection, cmd: AddMediaCommand) -> Result<()
 }
 
 pub async fn fragment_media(
+    ffmpeg_bin: &str,
     input: impl AsRef<Path>,
     output_dir: impl AsRef<Path>,
     duration: usize,
 ) -> Result<Vec<model::NewFragment>> {
-    let status = Command::new("ffmpeg")
+    let status = Command::new(ffmpeg_bin)
         .arg("-hide_banner")
         .arg("-loglevel")
         .arg("error")

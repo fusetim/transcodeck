@@ -19,7 +19,7 @@ use uuid::Uuid;
 use crate::{model, schema, DaemonCommand};
 use model::{FragmentJobStatus, JobStatus};
 
-pub async fn daemon(db: &mut PgConnection, cmd: DaemonCommand) -> Result<()> {
+pub async fn daemon(db: &mut PgConnection, cmd: DaemonCommand, ffmpeg_bin: &str) -> Result<()> {
     println!("Starting daemon...");
 
     let mut http = reqwest::Client::new();
@@ -137,7 +137,7 @@ pub async fn daemon(db: &mut PgConnection, cmd: DaemonCommand) -> Result<()> {
             let ctemplate =
                 Template::parse(&ffmpeg_command).expect("Failed to parse ffmpeg command");
             let command = ctemplate.render(&template_values)?;
-            let mut transcoder = tokio::process::Command::new("ffmpeg")
+            let mut transcoder = tokio::process::Command::new(ffmpeg_bin)
                 .args(command.split_whitespace())
                 .spawn()?;
 

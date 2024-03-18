@@ -1,0 +1,14 @@
+version: '3'
+services:
+  transcodeck:
+    image: ghcr.io/fusetim/transcodeck:v0.0.1
+    volumes:
+      - /var/tmp/output:/app/data
+    command: [ 
+      "--ffmpeg-bin",
+      "/usr/local/bin/ffmpeg",
+      "daemon",
+      "/app/data"
+    ]
+    environment:
+      - DATABASE_URL=${DATABASE_URL}

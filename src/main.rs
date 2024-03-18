@@ -17,6 +17,10 @@ struct Args {
     #[clap(long, env = "DATABASE_URL")]
     db_uri: String,
 
+    /// FFmpeg bin to use for transcoding
+    #[clap(long, env = "FFMPEG_BIN", default_value = "ffmpeg")]
+    ffmpeg_bin: String,
+
     #[clap(subcommand)]
     cmd: Command,
 }
@@ -104,12 +108,13 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     let mut db = PgConnection::establish(&args.db_uri)?;
+    let ffmpeg_bin = args.ffmpeg_bin.clone();
 
     match args.cmd {
         Command::AddMedia(cmd) => {
-            add_media::add_media(&mut db, cmd).await?;
+            add_media::add_media(&mut db, cmd, &ffmpeg_bin).await?;
         }
-        Command::Daemon(cmd) => daemon::daemon(&mut db, cmd).await?,
+        Command::Daemon(cmd) => daemon::daemon(&mut db, cmd, &ffmpeg_bin).await?,
         Command::ListMedia => {
             println!("ListMedia");
         }
