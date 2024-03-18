@@ -27,7 +27,7 @@ pub async fn daemon(db: &mut PgConnection, cmd: DaemonCommand, ffmpeg_bin: &str)
     for (key, value) in std::env::vars() {
         let mut key = key.to_lowercase();
         if key.starts_with("transcodeck_template_") {
-            let template_key = key.split_off(22);
+            let template_key = key.split_off(21);
             template_values.insert(template_key, value);
         }
     }

@@ -12,3 +12,4 @@ services:
     ]
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - transcodeck_template_lp=2
