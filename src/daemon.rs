@@ -14,6 +14,7 @@ use tokio_util::compat::{
     FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt, TokioAsyncReadCompatExt,
     TokioAsyncWriteCompatExt,
 };
+use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
 use crate::{model, schema, DaemonCommand};
@@ -102,8 +103,10 @@ pub async fn daemon(db: &mut PgConnection, cmd: DaemonCommand, ffmpeg_bin: &str)
             let mut fragment_file = tokio::fs::File::create(&fragment_path).await?;
             println!("Downloading fragment: {}", fragment_url);
             let mut response = http.get(&fragment_url).send().await?;
-            let mut bytes = response.bytes().await?;
-            tokio::io::copy(&mut bytes.as_ref(), &mut fragment_file).await?;
+            while let Some(chunk) = response.chunk().await? {
+                tokio::io::copy(&mut chunk.as_ref(), &mut fragment_file).await?;
+                fragment_file.flush().await?;
+            }
             println!("Fragment downloaded: {}", fragment_path.display());
 
             // Decrypt the media fragment if needed
